@@ -103,33 +103,70 @@ Application initializes, creates database pool, makes it available to all handle
 ### 3.2 Basic User Model and CRUD Operations
 
 #### Logic
-Define a Rust struct that maps to a basic users table in the database. Implement basic Create, Read, Update, Delete (CRUD) operations for this model.
+Define a Rust struct that maps to a basic users table in the database (e.g., a public `profiles` table linked to `auth.users`). Implement basic Create, Read, Update, Delete (CRUD) operations for this model. This demonstrates interaction with a database beyond Supabase-managed tables if needed.
 
 #### Relationships
-AuthUser (from JWT) -> User (database model).
+AuthUser (from JWT) -> User (database model, e.g., `Profile`).
 
 #### Entities
-User (struct representing a database user, e.g., id, email, created_at).
+User (struct representing a database user, e.g., id, email, created_at, custom profile fields).
 
 #### Libraries
 - **sqlx**: For executing database queries.
 - **serde**: For serializing/deserializing database results to/from User struct.
 
 #### Interactions
-Handlers receive AuthUser, use its id to query/manipulate User data in the database.
+Handlers receive AuthUser, use its id to query/manipulate User data in the custom database table.
+
+### 3.3: Sample Role-Based Endpoints (Dummy Service)
+
+#### Logic
+Implement simple "echo" API endpoints to demonstrate role-based authorization based on claims in the Supabase JWT.
+- An `/api/echo` endpoint accessible by any authenticated user.
+- An `/api/premium_echo` endpoint accessible only by authenticated users possessing a "premium" role.
+This setup will serve as a placeholder, guiding developers on how to implement more complex services with role-based access control (RBAC). Assumes user roles (e.g., from `auth.users.role` or custom claims) are present in the Supabase JWT.
+
+#### Relationships
+Authenticated Request -> Role Authorization (performed in-handler for simplicity, or via dedicated middleware) -> Handler.
+`AuthUser` (from JWT, containing parsed role) -> Authorization Logic within Handler.
+API Routes -> Specific Handlers.
+
+#### Entities
+- **`Role` enum**: (e.g., `#[derive(Debug, Clone, PartialEq, serde::Deserialize)] enum Role { User, Premium }`) to represent user roles, parsed from JWT claims and stored in `AuthUser`.
+- **`EchoRequest` struct**: (e.g., `#[derive(serde::Deserialize)] struct EchoRequest { message: String }`) for incoming echo data.
+- **`EchoResponse` struct**: (e.g., `#[derive(serde::Serialize)] struct EchoResponse { echoed_message: String, user_id: String, role: String }`) for outgoing echo data.
+- ***Modification***: `AuthUser` struct (from Phase 2.3) is updated to include the parsed `Role` enum.
+
+#### Libraries
+- None new beyond existing `axum`, `serde`. Internal modules for `Role` enum and request/response DTOs will be created.
+
+#### Interactions
+1.  Update `AuthUser` struct (Phase 2.3) to parse the relevant JWT claim (e.g., 'role', 'user_roles', or a custom claim from `app_metadata`) into the `Role` enum.
+2.  Implement `echo_handler` for `POST /api/echo`:
+    -   Extracts `AuthUser` via `axum::extract::Extension`.
+    -   Accepts `Json<EchoRequest>`.
+    -   Returns `Json<EchoResponse>` including user's ID and role.
+3.  Implement `premium_echo_handler` for `POST /api/premium_echo`:
+    -   Extracts `AuthUser`.
+    -   Performs a role check (e.g., `if user.role == Role::Premium`).
+    -   If unauthorized, returns an `AppError` resulting in a 403 Forbidden response.
+    -   Accepts `Json<EchoRequest>`.
+    -   Returns `Json<EchoResponse>` with a premium-specific message.
+4.  Add these new routes to the Axum router, ensuring they are protected by the JWT validation middleware (from Phase 2.2).
+5.  *Note in Documentation*: For applications with multiple roles or complex permissions, advise transitioning from in-handler role checks to dedicated Axum middleware or extractor guards for better separation of concerns and reusability (DRY principle).
 
 ## Phase 4: Error Handling & Logging
 
 ### 4.1 Centralized Error Handling
 
 #### Logic
-Define a custom, unified error type (AppError) that encapsulates all possible application errors. Implement conversion from various error sources (e.g., sqlx::Error, jsonwebtoken::Error) to AppError. Implement IntoResponse for AppError to convert it into standardized HTTP error responses (e.g., JSON with status code).
+Define a custom, unified error type (AppError) that encapsulates all possible application errors. Implement conversion from various error sources (e.g., sqlx::Error, jsonwebtoken::Error, custom auth errors) to AppError. Implement IntoResponse for AppError to convert it into standardized HTTP error responses (e.g., JSON with status code).
 
 #### Relationships
 All application components -> AppError.
 
 #### Entities
-Custom AppError enum with variants for different error scenarios (e.g., Unauthorized, NotFound, DatabaseError).
+Custom AppError enum with variants for different error scenarios (e.g., Unauthorized, Forbidden, NotFound, DatabaseError, ValidationError).
 
 #### Libraries
 - **thiserror**: Derive macros for Error trait and automatic From implementations.
@@ -163,7 +200,7 @@ Code emits tracing::info!, tracing::error!, tracing::debug! macros; tracing-subs
 ### 5.1 Unit Testing
 
 #### Logic
-Write isolated tests for individual functions and modules, mocking external dependencies where necessary.
+Write isolated tests for individual functions and modules, mocking external dependencies where necessary (e.g., JWKS fetching, database calls for specific units).
 
 #### Relationships
 Test modules to application modules.
@@ -182,26 +219,27 @@ cargo test command execution.
 ### 5.2 Integration Testing
 
 #### Logic
-Write tests that exercise the interaction between multiple components (e.g., middleware, handlers, database). Use a test database for realistic scenarios.
+Write tests that exercise the interaction between multiple components (e.g., JWT middleware, role-based endpoint authorization, handlers, database). Use a test database for realistic scenarios. Test `echo` and `premium_echo` endpoints with valid/invalid tokens and roles.
 
 #### Relationships
 Test suite to running Axum application and test database.
 
 #### Entities
-Test database schema, test data.
+Test database schema, test data (including users with different roles for JWT generation if mocking JWTs, or setup in a test Supabase instance if using live tokens).
 
 #### Libraries
-- **axum::test**: Utilities for sending HTTP requests to the Axum application in tests.
+- **axum::test**: Utilities for sending HTTP requests to the Axum application in tests (or `reqwest` if testing an externalized service).
 - **sqlx::test**: For managing test database transactions.
 - **testcontainers** (optional, for spinning up temporary PostgreSQL containers).
+- Potentially a helper library for generating test JWTs with specific claims/roles if not relying on an external Supabase instance for tokens.
 
 #### Interactions
-Test code sends HTTP requests to the test Axum server, asserts on responses and database state.
+Test code sends HTTP requests to the test Axum server, asserts on responses (status codes, bodies) and database state.
 
 ### 5.3 Containerization
 
 #### Logic
-Create a Dockerfile to package the Rust Axum application into a lightweight, portable container image. Define environment variables for runtime configuration.
+Create a Dockerfile to package the Rust Axum application into a lightweight, portable container image. Define environment variables for runtime configuration. Emphasize multi-stage builds for smaller production images.
 
 #### Relationships
 Rust project -> Docker image.
