@@ -6,13 +6,13 @@ use axum::{
 };
 use jsonwebtoken::{decode, decode_header, Validation, jwk::AlgorithmParameters, DecodingKey, Algorithm};
 use std::env;
+use serde_json::Value;
 
 use super::jwks::get_jwks;
 use super::error::AuthError;
-// AI: AuthUser will be defined in Phase 2.3. For now, we just validate the token.
-// use super::user_context::AuthUser; 
+use super::user_context::AuthUser;
 
-async fn validate_token(token_str: &str) -> Result<(), AuthError> { 
+async fn validate_token(token_str: &str) -> Result<Value, AuthError> { 
     let token_header = decode_header(token_str).map_err(|e| AuthError::InvalidToken(format!("Invalid token header: {}", e)))?;
     let kid = token_header.kid.ok_or_else(|| AuthError::InvalidToken("Token header missing 'kid' (key ID)".to_string()))?;
     let alg_from_header = token_header.alg;
@@ -51,12 +51,12 @@ async fn validate_token(token_str: &str) -> Result<(), AuthError> {
         _ => return Err(AuthError::InvalidToken(format!("Unsupported JWK algorithm parameters for creating decoding key: {:?}", jwk.algorithm))),
     };
 
-    decode::<serde_json::Value>(token_str, &decoding_key, &validation)?;
-
-    Ok(())
+    let token_data = decode::<Value>(token_str, &decoding_key, &validation)?;
+    
+    Ok(token_data.claims)
 }
 
-pub async fn jwt_auth_middleware(req: Request, next: Next) -> Result<Response, AuthError> {
+pub async fn jwt_auth_middleware(mut req: Request, next: Next) -> Result<Response, AuthError> {
     let auth_header = req.headers()
         .get(header::AUTHORIZATION)
         .and_then(|header| header.to_str().ok());
@@ -71,9 +71,60 @@ pub async fn jwt_auth_middleware(req: Request, next: Next) -> Result<Response, A
         return Err(AuthError::MissingToken);
     };
 
-    validate_token(&token_str).await?;
-    // AI: In Phase 2.3, the validated AuthUser should be inserted into request extensions:
-    // req.extensions_mut().insert(auth_user);
+    let claims = validate_token(&token_str).await?;
+    
+    // Extract user information from claims
+    let user_id = claims["sub"]
+        .as_str()
+        .ok_or_else(|| AuthError::TokenClaimInvalid {
+            claim: "sub".to_string(),
+            reason: "Missing or invalid subject claim".to_string(),
+        })?
+        .to_string();
+    
+    let email = claims["email"].as_str().map(|s| s.to_string());
+    
+    // Extract role from claims - supports both direct "role" field and app_metadata.role
+    let role_str = if let Some(role) = claims["role"].as_str() {
+        Some(role)
+    } else if let Some(app_metadata) = claims.get("app_metadata") {
+        app_metadata["role"].as_str()
+    } else {
+        None
+    };
+    
+    // Parse role from string or use default
+    let role = match role_str {
+        Some("premium") => super::user_context::UserRole::Premium,
+        Some("admin") => super::user_context::UserRole::Admin,
+        _ => super::user_context::UserRole::User, // Default role
+    };
+    
+    // Get token timestamps
+    let iat = claims["iat"]
+        .as_i64()
+        .ok_or_else(|| AuthError::TokenClaimInvalid {
+            claim: "iat".to_string(),
+            reason: "Missing or invalid issued at claim".to_string(),
+        })?;
+    
+    let exp = claims["exp"]
+        .as_i64()
+        .ok_or_else(|| AuthError::TokenClaimInvalid {
+            claim: "exp".to_string(),
+            reason: "Missing or invalid expiration claim".to_string(),
+        })?;
+    
+    // Create AuthUser and add to request extensions
+    let auth_user = AuthUser {
+        id: user_id,
+        email,
+        role,
+        iat,
+        exp,
+    };
+    
+    req.extensions_mut().insert(auth_user);
 
     Ok(next.run(req).await)
 } 

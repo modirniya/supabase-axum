@@ -1,12 +1,13 @@
 use axum::{
     routing::get,
     Router,
-    response::Html,
+    response::{Html, IntoResponse, Json},
     serve,
     middleware,
 };
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
+use serde_json::json;
 
 // AI: Declare modules according to project structure
 mod auth;
@@ -45,7 +46,14 @@ async fn handler() -> Html<&'static str> {
     Html("<h1>Hello, World from Axum!</h1><p>AI: This is the root handler. Implement actual endpoints as per DEV-PLAN.md.</p>")
 }
 
-// AI: This is a placeholder protected handler.
-async fn protected_handler() -> Html<&'static str> {
-    Html("<h1>Protected Route</h1><p>AI: If you see this, JWT validation was successful.</p>")
+// Protected handler that demonstrates using AuthUser extractor
+async fn protected_handler(auth_user: auth::user_context::AuthUser) -> impl IntoResponse {
+    Json(json!({
+        "message": "Protected route access successful",
+        "user_id": auth_user.id,
+        "email": auth_user.email,
+        "role": auth_user.role.to_string(),
+        "token_issued_at": auth_user.iat,
+        "token_expires_at": auth_user.exp
+    }))
 }

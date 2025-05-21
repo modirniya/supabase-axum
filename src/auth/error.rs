@@ -32,6 +32,9 @@ pub enum AuthError {
     
     #[error("Required environment variable for validation not set: {0}")]
     MissingEnvVar(String),
+    
+    #[error("Internal server error: {0}")]
+    InternalError(String),
 }
 
 impl IntoResponse for AuthError {
@@ -45,6 +48,7 @@ impl IntoResponse for AuthError {
             AuthError::JwkKidNotFound { .. } => (StatusCode::INTERNAL_SERVER_ERROR, "Could not verify token (key not found)".to_string()),
             AuthError::JwksProcessingError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Error processing signing keys".to_string()),
             AuthError::MissingEnvVar(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Server configuration error for auth".to_string()),
+            AuthError::InternalError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string()),
         };
 
         let body = Json(json!({ "error": error_message }));
