@@ -2,6 +2,9 @@ use sqlx::{postgres::PgPoolOptions, PgPool, Error as SqlxError};
 use std::env;
 use std::time::Duration;
 
+pub mod models; // AI: Added models submodule
+pub mod profile_repository; // AI: Added profile_repository submodule
+
 // AI: Consider moving this error to a more general AppError enum in Phase 4.1
 #[derive(Debug, thiserror::Error)]
 pub enum DbError {
@@ -13,6 +16,22 @@ pub enum DbError {
     
     #[error("Failed to connect to database after multiple retries: {0}")]
     ConnectionError(SqlxError),
+
+    // AI: Add specific database operation errors as needed
+    #[error("User profile not found")]
+    ProfileNotFound,
+
+    #[error("Database query failed: {0}")]
+    QueryError(#[from] SqlxError), // Generic query error
+
+    #[error("Failed to create profile: {0}")]
+    ProfileCreationError(SqlxError),
+
+    #[error("Failed to update profile: {0}")]
+    ProfileUpdateError(SqlxError),
+
+    #[error("Failed to delete profile: {0}")]
+    ProfileDeleteError(SqlxError),
 }
 
 // AI: This function initializes a PgPool. It should be called once at application startup.

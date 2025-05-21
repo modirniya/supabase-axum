@@ -13,3 +13,17 @@ jsonwebtoken = "9"
 thiserror = "1"
 serde_json = "1"
 sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "macros", "uuid", "chrono", "json" ] }
+
+# Direct dependencies for data types used in models
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+[features]
+# Local development
+dev = []
+# Production
+prod = []
+
+# Enable offline mode for SQLx
+[package.metadata.sqlx]
+offline = true

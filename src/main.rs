@@ -1,18 +1,17 @@
 use axum::{
     routing::get,
     Router,
-    response::{Html, IntoResponse, Json},
+    response::Html,
     serve,
     middleware,
-    Extension,
 };
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use serde_json::json;
 
 // AI: Declare modules according to project structure
 mod auth;
 mod db;
+mod routes; // Added routes module
 
 #[tokio::main]
 async fn main() {
@@ -50,11 +49,14 @@ async fn main() {
         }
     }
 
+    // Build application with routes
     let app = Router::new()
-        .route("/", get(handler))
-        .route("/protected", get(protected_handler))
-        .route_layer(middleware::from_fn(auth::middleware::jwt_auth_middleware))
-        .layer(Extension(db_pool));
+        .route("/", get(handler)) // Public route
+        // Group all /api routes and protect them with JWT auth middleware
+        .nest("/api", routes::app_routes(db_pool.clone()) // Pass db_pool here
+            .route_layer(middleware::from_fn(auth::middleware::jwt_auth_middleware))
+        );
+        // .layer(Extension(db_pool)); // AI: Removed as PgPool is now passed via with_state in app_routes
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     // AI: Read address from environment variable if available using std::env::var, e.g. for PORT
@@ -65,18 +67,6 @@ async fn main() {
 
 async fn handler() -> Html<&'static str> {
     Html("<h1>Hello, World from Axum!</h1><p>AI: This is the root handler. Implement actual endpoints as per DEV-PLAN.md.</p>")
-}
-
-// Protected handler that demonstrates using AuthUser extractor
-async fn protected_handler(auth_user: auth::user_context::AuthUser) -> impl IntoResponse {
-    Json(json!({
-        "message": "Protected route access successful",
-        "user_id": auth_user.id,
-        "email": auth_user.email,
-        "role": auth_user.role.to_string(),
-        "token_issued_at": auth_user.iat,
-        "token_expires_at": auth_user.exp
-    }))
 }
 
 // AI: Example handler showing how to access the db_pool (add in a later phase if needed)
