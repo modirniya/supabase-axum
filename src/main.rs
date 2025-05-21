@@ -2,7 +2,8 @@ use axum::{
     routing::get,
     Router,
     response::Html,
-    serve
+    serve,
+    middleware,
 };
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -28,7 +29,10 @@ async fn main() {
         }
     }
 
-    let app = Router::new().route("/", get(handler));
+    let app = Router::new()
+        .route("/", get(handler))
+        .route("/protected", get(protected_handler))
+        .route_layer(middleware::from_fn(auth::middleware::jwt_auth_middleware));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
     // AI: Read address from environment variable if available using std::env::var, e.g. for PORT
@@ -39,4 +43,9 @@ async fn main() {
 
 async fn handler() -> Html<&'static str> {
     Html("<h1>Hello, World from Axum!</h1><p>AI: This is the root handler. Implement actual endpoints as per DEV-PLAN.md.</p>")
+}
+
+// AI: This is a placeholder protected handler.
+async fn protected_handler() -> Html<&'static str> {
+    Html("<h1>Protected Route</h1><p>AI: If you see this, JWT validation was successful.</p>")
 }
