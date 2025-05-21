@@ -1,0 +1,19 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+## Development Rules
+
+- **Strict Adherence**: All implementations must strictly adhere to the definitions and guidelines provided within this document.
+- **No Undefined Features**: Do not implement features, functionalities, or entities that are not explicitly described in this plan.
+- **Faithfulness to Plan**: The developmental process shall remain faithful to this DEV-PLAN at all times, unless explicitly overridden by a user request.
+- **AI Guidance**: Placeholders within project files should contain clear instructions to guide the AI in implementing specific functionalities.
+- **Open-Closed Principle**: Design components to be open for extension but closed for modification.
+- **Loose Coupling**: Favor loosely-coupled dependencies to ensure modularity, reusability, and maintainability of the codebase.
+- **Iterative Builds**: The project must be built repeatedly after each development iteration to catch build errors as early as possible.
+- **Version Control Initialization**: A Git repository and corresponding GitHub repository must be created at the initiation of the project.
+- **Gitignore Vigilance**: Regularly check the .gitignore file to ensure sensitive information does not leave the local development machine.
+- **Automated Commits**: Each commit must be performed automatically after each successful build.
+- **Manual Push**: Pushing to the remote repository will remain upon user request.
+- **Rust Edition**: Rust will use the 2024 edition.
